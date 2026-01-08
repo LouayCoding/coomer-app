@@ -6,6 +6,13 @@ import type { Post, Creator, PostsParams, CreatorPostsParams, Service } from '@/
 
 export class CoomerApiClient {
   private async makeRequest<T>(url: string): Promise<T> {
+    console.log('🔍 API Request:', {
+      url,
+      hasCookie: !!API_HEADERS.Cookie,
+      cookiePreview: API_HEADERS.Cookie?.substring(0, 50) + '...',
+      headers: API_HEADERS
+    });
+
     return new Promise((resolve, reject) => {
       const options = {
         headers: API_HEADERS
@@ -13,7 +20,12 @@ export class CoomerApiClient {
 
       https.get(url, options, (res) => {
         if (res.statusCode !== 200) {
-          console.error('HTTP Error:', res.statusCode, url);
+          console.error('❌ HTTP Error:', {
+            statusCode: res.statusCode,
+            statusMessage: res.statusMessage,
+            url,
+            headers: res.headers
+          });
           reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
           return;
         }
