@@ -33,7 +33,9 @@ export default function Home() {
       const response = await fetch(url);
       
       if (!response.ok) {
-        showToast('Failed to load posts', 'error');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData.details || errorData.error || `HTTP ${response.status}`;
+        showToast(`Failed to load posts: ${errorMsg}`, 'error');
         return;
       }
       
