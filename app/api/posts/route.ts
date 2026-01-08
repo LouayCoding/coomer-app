@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
       posts = await apiClient.fetchPosts({ offset, q, service });
       
       if (!Array.isArray(posts)) {
+        console.error('API returned non-array response:', posts);
         return NextResponse.json({ data: [] });
       }
       
@@ -28,9 +29,15 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: posts });
   } catch (error) {
-    console.error('Error fetching posts:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error fetching posts:', {
+      error: errorMessage,
+      offset: request.nextUrl.searchParams.get('offset'),
+      hasSessionCookie: !!process.env.SESSION_COOKIE,
+    });
+    
     return NextResponse.json(
-      { data: [], error: 'Failed to fetch posts' },
+      { data: [], error: 'Failed to fetch posts', details: errorMessage },
       { status: 500 }
     );
   }
