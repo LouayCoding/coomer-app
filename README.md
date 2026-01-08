@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Coomer Content Browser
 
-## Getting Started
+A modern Next.js application for browsing and searching creator content from multiple platforms. Built with TypeScript, Tailwind CSS, and featuring a sleek dark theme inspired by Vercel and modern web design.
 
-First, run the development server:
+## 🚀 Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Browse Posts** - View latest content from all creators
+- **Search & Filter** - Search by keywords and filter by platform (OnlyFans, Fansly, Patreon, etc.)
+- **Creator Profiles** - View all posts from specific creators
+- **Responsive Design** - Beautiful UI that works on all devices
+- **Dark Theme** - Modern dark interface with orange accent colors
+- **Pagination** - Navigate through large datasets efficiently
+
+## 🏗️ Architecture
+
+### 3-Layer System
+```
+Browser (React) → Next.js API Routes → Coomer API
+     ↓                    ↓                ↓
+  UI Layer          Proxy Layer      External API
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Key Features
+- **Server-side API Proxy** - Handles authentication and gzip decompression
+- **TypeScript** - Full type safety across the application
+- **Client-side Filtering** - Fast creator search without extra API calls
+- **Optimized Images** - Lazy loading and responsive images
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📁 Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+coomer-app/
+├── app/
+│   ├── api/                    # Server-side API routes
+│   │   ├── posts/route.ts     # Posts endpoint
+│   │   ├── creators/route.ts  # Creators list
+│   │   └── creator/[service]/[id]/route.ts
+│   ├── creators/page.tsx      # Creators list page
+│   ├── creator/[service]/[id]/page.tsx  # Creator detail
+│   ├── page.tsx               # Home/Posts page
+│   ├── layout.tsx             # Root layout
+│   └── globals.css            # Global styles
+├── components/
+│   ├── Header.tsx             # Navigation header
+│   ├── SearchBar.tsx          # Search component
+│   ├── PostCard.tsx           # Post display card
+│   ├── CreatorCard.tsx        # Creator display card
+│   ├── LoadingSpinner.tsx     # Loading indicator
+│   └── Pagination.tsx         # Pagination controls
+├── lib/
+│   ├── api-client.ts          # API client with gzip handling
+│   └── constants.ts           # API configuration
+└── types/
+    └── api.ts                 # TypeScript type definitions
+```
 
-## Learn More
+## 🛠️ Getting Started
 
-To learn more about Next.js, take a look at the following resources:
+### Prerequisites
+- Node.js 18+ installed
+- npm, yarn, or pnpm
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Installation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Clone the repository
+2. Install dependencies:
+```bash
+npm install
+```
 
-## Deploy on Vercel
+3. Run the development server:
+```bash
+npm run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🎨 Design
+
+The application features a modern dark theme with:
+- **Primary Background**: `#0a0a0a`
+- **Card Background**: `#1a1a1a`
+- **Accent Color**: `#ff9000` (Orange)
+- **Border Color**: `#2a2a2a`
+
+Inspired by Vercel's clean design and modern content platforms.
+
+## 🔧 API Integration
+
+The app uses a proxy pattern to communicate with the Coomer API:
+
+### Authentication
+Uses session cookie for authenticated requests.
+
+### Headers
+Special headers required for DDoS protection bypass:
+- `Accept: text/css` (not `application/json`)
+- Custom User-Agent
+- Session cookie
+
+### Gzip Handling
+All responses are gzip-compressed and automatically decompressed server-side.
+
+## 📱 Pages
+
+- **/** - Browse all posts with search and filtering
+- **/creators** - View all creators with client-side search
+- **/creator/[service]/[id]** - View posts from specific creator
+
+## 🚀 Build & Deploy
+
+### Build for production:
+```bash
+npm run build
+```
+
+### Start production server:
+```bash
+npm start
+```
+
+### Deploy to Vercel:
+```bash
+vercel deploy
+```
+
+## 📝 License
+
+This project is for educational purposes.
