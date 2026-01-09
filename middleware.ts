@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 
 // Public routes that don't require authentication
-const publicRoutes = ['/login', '/auth/callback', '/api/auth/callback', '/no-access'];
+const publicRoutes = ['/login', '/api/auth/verify-code', '/no-access'];
+
+// Initialize Supabase client for middleware
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!;
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,8 +17,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow static files and API routes that don't need auth
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/posts') ||
+    pathname.startsWith('/api/creators') ||
+    pathname.startsWith('/api/popular') ||
+    pathname.startsWith('/api/random') ||
+    pathname.startsWith('/api/tags') ||
+    pathname.startsWith('/api/creator') ||
+    pathname.includes('.')
+  ) {
+    // For API routes, still check auth but don't redirect
+    if (pathname.startsWith('/api/')) {
+      const sessionCookie = request.cookies.get('access_session');
+      if (!sessionCookie) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
+    return NextResponse.next();
+  }
+
   // Get session from cookie
-  const sessionCookie = request.cookies.get('discord_session');
+  const sessionCookie = request.cookies.get('access_session');
   
   if (!sessionCookie) {
     return NextResponse.redirect(new URL('/login', request.url));
@@ -22,50 +47,74 @@ export async function middleware(request: NextRequest) {
 
   try {
     const session = JSON.parse(sessionCookie.value);
-    const discordId = session.discord_id;
+    const { code_id, fingerprint, expires_at } = session;
 
-    // Check if user has valid subscription
-    const { data: subscription, error } = await supabaseAdmin
-      .from('subscriptions')
+    // Quick expiry check (without database)
+    if (new Date(expires_at) < new Date()) {
+      // Clear expired session
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('access_session');
+      return response;
+    }
+
+    // Create Supabase client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify code is still valid in database
+    const { data: accessCode, error } = await supabase
+      .from('access_codes')
       .select('*')
-      .eq('discord_id', discordId)
-      .eq('status', 'active')
+      .eq('id', code_id)
+      .eq('is_active', true)
       .single();
 
-    if (error || !subscription) {
-      // No valid subscription - redirect to no access page
-      return NextResponse.redirect(new URL('/no-access', request.url));
+    if (error || !accessCode) {
+      // Code not found or inactive - clear session
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('access_session');
+      return response;
     }
 
-    // Check if subscription is expired
-    const expiresAt = new Date(subscription.expires_at);
-    const now = new Date();
-
-    if (expiresAt < now) {
-      // Subscription expired - update status and redirect
-      await supabaseAdmin
-        .from('subscriptions')
-        .update({ status: 'expired' })
-        .eq('id', subscription.id);
-
-      return NextResponse.redirect(new URL('/no-access', request.url));
+    // Check if code is expired in database
+    if (new Date(accessCode.expires_at) < new Date()) {
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('access_session');
+      return response;
     }
 
-    // Log access
-    await supabaseAdmin.from('access_logs').insert({
-      user_id: subscription.user_id,
-      discord_id: discordId,
-      action: 'page_access',
-      ip_address: request.headers.get('x-forwarded-for') || 'unknown',
-      user_agent: request.headers.get('user-agent'),
-      success: true,
-    });
+    // Verify device fingerprint is registered for this code
+    const { data: device, error: deviceError } = await supabase
+      .from('devices')
+      .select('*')
+      .eq('code_id', code_id)
+      .eq('fingerprint', fingerprint)
+      .single();
 
-    // Valid subscription - allow access
+    if (deviceError || !device) {
+      // Device not registered - possible code sharing attempt
+      const response = NextResponse.redirect(new URL('/login', request.url));
+      response.cookies.delete('access_session');
+      return response;
+    }
+
+    // Update last_seen for device
+    await supabase
+      .from('devices')
+      .update({ 
+        last_seen: new Date().toISOString(),
+        ip_address: request.headers.get('x-forwarded-for') || 'unknown'
+      })
+      .eq('id', device.id);
+
+    // Valid session - allow access
     return NextResponse.next();
+
   } catch (error) {
     console.error('Middleware error:', error);
-    return NextResponse.redirect(new URL('/login', request.url));
+    // On error, redirect to login
+    const response = NextResponse.redirect(new URL('/login', request.url));
+    response.cookies.delete('access_session');
+    return response;
   }
 }
 
@@ -76,8 +125,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder
+     * - public folder files
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|manifest|json)$).*)',
   ],
 };

@@ -4,54 +4,73 @@ import { supabaseAdmin } from '@/lib/supabase';
 export async function GET(request: NextRequest) {
   try {
     // Get session from cookie
-    const sessionCookie = request.cookies.get('discord_session');
+    const sessionCookie = request.cookies.get('access_session');
     
     if (!sessionCookie) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     const session = JSON.parse(sessionCookie.value);
-    const discordId = session.discord_id;
+    const { code_id, fingerprint } = session;
 
-    // Get user data
-    const { data: user } = await supabaseAdmin
-      .from('users')
+    // Get access code details
+    const { data: accessCode, error: codeError } = await supabaseAdmin
+      .from('access_codes')
       .select('*')
-      .eq('discord_id', discordId)
+      .eq('id', code_id)
       .single();
 
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (codeError || !accessCode) {
+      return NextResponse.json({ error: 'Code not found' }, { status: 404 });
     }
 
-    // Get subscription data
-    const { data: subscription } = await supabaseAdmin
-      .from('subscriptions')
+    // Get device info
+    const { data: device } = await supabaseAdmin
+      .from('devices')
       .select('*')
-      .eq('discord_id', discordId)
-      .eq('status', 'active')
+      .eq('code_id', code_id)
+      .eq('fingerprint', fingerprint)
       .single();
 
     // Calculate days left
-    let daysLeft = 0;
-    if (subscription) {
-      const expiresAt = new Date(subscription.expires_at);
-      const now = new Date();
-      daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    }
+    const expiresAt = new Date(accessCode.expires_at);
+    const now = new Date();
+    const daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Get device count for this code
+    const { count: deviceCount } = await supabaseAdmin
+      .from('devices')
+      .select('*', { count: 'exact', head: true })
+      .eq('code_id', code_id);
 
     return NextResponse.json({
-      discord_id: user.discord_id,
-      discord_username: user.discord_username,
-      discord_avatar: user.discord_avatar,
-      subscription: subscription ? {
-        status: subscription.status,
-        expires_at: subscription.expires_at,
-        days_left: daysLeft,
-      } : null,
+      code: accessCode.code,
+      note: accessCode.note,
+      subscription: {
+        status: accessCode.is_active && daysLeft > 0 ? 'active' : 'expired',
+        expires_at: accessCode.expires_at,
+        days_left: Math.max(0, daysLeft),
+      },
+      device: {
+        fingerprint: fingerprint.slice(0, 8) + '...',
+        registered_at: device?.created_at,
+        last_seen: device?.last_seen,
+      },
+      limits: {
+        max_devices: accessCode.max_devices,
+        used_devices: deviceCount || 0,
+      }
     });
+
   } catch (error) {
     console.error('User API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch user data' }, { status: 500 });
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
+}
+
+// Logout endpoint
+export async function DELETE(request: NextRequest) {
+  const response = NextResponse.json({ success: true });
+  response.cookies.delete('access_session');
+  return response;
 }
